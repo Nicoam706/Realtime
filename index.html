@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realtime</title>
+    <style>
+        #juego {
+            border: 2px solid black;
+            width: 500px;
+            height: 500px;
+            position: relative;
+        }
+        .jugador {
+            width: 20px;
+            height: 20px;
+            position: absolute;
+            text-align: center;
+            color: white;
+            font-size: 12px;
+            line-height: 20px;
+        }
+        #fruta {
+            width: 20px;
+            height: 20px;
+            background-color: red;
+            position: absolute;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Realtime:</h1>
+    <div id="juego">
+        <!-- Plantilla jugador -->
+        <div class="jugador" id="plantilla"></div>
+    </div>
+    <div id="bloqueConectar">
+        <input id="textoServer" value="127.0.0.1">
+        <button id="botonConectar">Conectar</button>
+    </div>
+
+<script>
+    // me guardo el jugador plantilla 
+    var jugadorBlueprint = document.getElementById("plantilla");
+    jugadorBlueprint.remove();
+
+    // plantilla fruta (un solo div y se actualiza la posición)
+    var frutaDiv = document.createElement("div");
+    frutaDiv.id = "fruta";
+
+    // conectar al server
+    var miconexion;
+    var miID = -1;
+    document.getElementById("botonConectar").addEventListener("click",()=>{
+        var direccion = document.getElementById("textoServer").value;
+        miconexion = new WebSocket("ws://"+direccion+":8080");
+
+        miconexion.addEventListener("message", (m)=>{
+            mensaje = JSON.parse(m.data.toString());
+
+            if(mensaje.tipo == "new"){
+                if(miID == -1) miID = mensaje.datos.id;
+                //Alguien nuevo ha llegado...crearlo en mi escena
+                nuevoJugador = jugadorBlueprint.cloneNode();
+                    nuevoJugador.id = mensaje.datos.id;
+                    nuevoJugador.dataset.dir = mensaje.datos.dir;
+                    nuevoJugador.dataset.posx = mensaje.datos.posx;
+                    nuevoJugador.dataset.posy = mensaje.datos.posy;
+                    nuevoJugador.dataset.puntos = mensaje.datos.puntos || 0;
+                    nuevoJugador.style.top = mensaje.datos.posy + "px";
+                    nuevoJugador.style.left = mensaje.datos.posx + "px";
+                    nuevoJugador.style.backgroundColor = mensaje.datos.color;
+                    nuevoJugador.innerText = mensaje.datos.puntos || 0; // Inicialmente muestra puntos
+                document.getElementById("juego").appendChild(nuevoJugador);
+
+            } else if(mensaje.tipo == "delete"){
+                document.getElementById(mensaje.datos).remove();
+
+            } else if(mensaje.tipo == "mover"){
+                jugadorAMover = document.getElementById(mensaje.datos.id);
+                jugadorAMover.dataset.dir = mensaje.datos.dir;
+                jugadorAMover.dataset.posx = mensaje.datos.posx;
+                jugadorAMover.dataset.posy = mensaje.datos.posy;
+                // Actualizar posición visual aquí mismo
+                jugadorAMover.style.top = mensaje.datos.posy + "px";
+                jugadorAMover.style.left = mensaje.datos.posx + "px";
+
+            } else if(mensaje.tipo == "fruta"){
+                frutaDiv.style.left = mensaje.datos.posx + "px";
+                frutaDiv.style.top = mensaje.datos.posy + "px";
+                document.getElementById("juego").appendChild(frutaDiv);
+
+            } else if(mensaje.tipo == "puntos"){
+                var jugador = document.getElementById(mensaje.datos.id);
+                if(jugador){
+                    jugador.innerHTML = mensaje.datos.puntos;
+                }
+            }
+        });
+    });
+
+    document.addEventListener("keydown", 
+        (ev)=>{
+            var yo = document.getElementById(miID);
+            // avisar al server de que me quiero mover
+            mensaje = {
+                tipo: "mover",
+                datos: {
+                    id: miID,
+                    posx: yo.dataset.posx,
+                    posy: yo.dataset.posy,
+                    dir: ev.key
+                }
+            };
+            miconexion.send(JSON.stringify(mensaje));
+        }
+    );
+
+    document.addEventListener("keyup", 
+        (ev)=>{
+            var yo = document.getElementById(miID);
+            mensaje = {
+                tipo: "mover",
+                datos: {
+                    id: miID,
+                    posx: yo.dataset.posx,
+                    posy: yo.dataset.posy,
+                    dir: "0"
+                }
+            };
+            miconexion.send(JSON.stringify(mensaje));
+        }
+    );
+
+    //Animar automaticamente la posicion de los jugadores
+    setInterval(()=>{
+        //buscar todos los jugadores(divs de la clase "jugador")
+        var listaJugadores = document.getElementsByClassName("jugador");
+        if(listaJugadores.length < 1) return;
+
+        //para cada uno...
+        for (var i = 0; i < listaJugadores.length; i++){
+            j = listaJugadores[i];
+            //leer su valor     dataset.dir
+            var dirección = j.dataset.dir;
+
+            //cambiar su posición en esa dirección
+            if (dirección=="a") {
+                j.dataset.posx = Number(j.dataset.posx) - 10; 
+            } else if (dirección=="d") {
+                j.dataset.posx = Number(j.dataset.posx) + 10;
+            } else if (dirección=="w") {
+                j.dataset.posy = Number(j.dataset.posy) - 10;
+            } else if (dirección=="s") {
+                j.dataset.posy = Number(j.dataset.posy) + 10;
+            }
+
+            if (j.dataset.posx<0) j.dataset.posx=0;  // si menor del mínimo = corregir al mínimo
+            if (j.dataset.posx>500-20) j.dataset.posx=500-20;   // si > max = corregir al max
+            if (j.dataset.posy<0) j.dataset.posy=0;  // si menor del mínimo = corregir al mínimo
+            if (j.dataset.posy>500-20) j.dataset.posy=500-20;   // si > max = corregir al max
+
+            // dibujar el jugador en su nueva posición
+            j.style.top=j.dataset.posy+"px";
+            j.style.left=j.dataset.posx+"px";
+        }
+    }, 40);
+</script>
+</body>
+</html>
