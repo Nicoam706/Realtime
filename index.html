@@ -53,7 +53,7 @@
     var miID = -1;
     document.getElementById("botonConectar").addEventListener("click",()=>{
         var direccion = document.getElementById("textoServer").value;
-        miconexion = new WebSocket("ws://"+direccion+":8080");
+        miconexion = new WebSocket("wss://"+direccion);
 
         miconexion.addEventListener("message", (m)=>{
             mensaje = JSON.parse(m.data.toString());
